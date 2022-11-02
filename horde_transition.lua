@@ -119,10 +119,10 @@ function horde_transition()
     );
     
     core:add_listener(
-		"horde_converter_MilitaryForceBuildingCompleteEvent",
-		"MilitaryForceBuildingCompleteEvent",
-		true,
-		function(context) 
+	"horde_converter_MilitaryForceBuildingCompleteEvent",
+	"MilitaryForceBuildingCompleteEvent",
+	true,
+	function(context) 
             local_out("MilitaryForceBuildingCompleteEvent event triggered")
             if context:character():is_null_interface() == false then
                 local_out("character NOT is_null_interface, inserting record")
