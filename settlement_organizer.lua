@@ -76,16 +76,32 @@ core:add_listener(
             local uic_region_name = string.gsub(uic_region:Id(), "CcoCampaignSettlement", "")
 
             -- get script interfaces
-            region = cm:get_region(uic_region_name)
-            local slot = region:slot_list():item_at(slot_id)
-            local building_name
-            if region:slot_list():item_at(slot_id):has_building() then
-                building_name = region:slot_list():item_at(slot_id):building():name()
-            else
-                building_name = "none"
-            end
 
-            -- get construction status
+            region = cm:get_region(uic_region_name)
+
+            local slot
+            local building_name
+            if find_parent_uicomponent(uic_context, "CcoCampaignBuildingSlotforeign") ~= nil then
+                -- this is a foreign slot
+                organizer_out("foreign slot selected")
+                slot = region:foreign_slot_manager_for_faction(cm:get_local_faction():name()):slots():item_at(slot_id)
+                if region:foreign_slot_manager_for_faction(cm:get_local_faction():name()):slots():item_at(slot_id):has_building() then
+                    building_name = region:foreign_slot_manager_for_faction(cm:get_local_faction():name()):slots():item_at(slot_id):building()
+                else
+                    building_name = "none"
+                end
+            else
+                -- this is a region slot
+                organizer_out("region slot selected")
+                slot = region:slot_list():item_at(slot_id)
+                if region:slot_list():item_at(slot_id):has_building() then
+                    building_name = region:slot_list():item_at(slot_id):building():name()
+                else
+                    building_name = "none"
+                end
+            end
+                                                                 
+            -- get construction status                                                                
             local isActive_flag = common.get_context_value("CcoCampaignBuildingSlot", uic_slot_name, "IsActive")
             local isUpgrading_flag = common.get_context_value("CcoCampaignBuildingSlot", uic_slot_name, "IsUpgrading")
             local canRepair_flag = common.get_context_value("CcoCampaignBuildingSlot", uic_slot_name, "CanRepair")
@@ -128,10 +144,24 @@ core:add_listener(
                     end_slot = slot
                     
                     organizer_out("valid end building selected") 
+
                     -- make sure we are moving buildings in the same region
-                    if start_slot:region():name() == end_slot:region():name() then
+                    local start_region_name
+                    local end_region_name
+                    if string.find(start_slot:template_key(), "secondary") and string.find(end_slot:template_key(), "secondary") then
+                        -- region slot
+                        start_region_name = start_slot:region():name()
+                        end_region_name = end_slot:region():name()
+                    else
+                        -- foreign slot
+                        start_region_name = start_slot:slot_manager():region():name()
+                        end_region_name = end_slot:slot_manager():region():name()
+                    end
+
+                    if start_region_name == end_region_name then
                         -- prevent building demolition notification
                         cm:disable_event_feed_events(true, "","","provinces_building_demolished")
+                        cm:disable_event_feed_events(true, "","","foreign_slot_building_demolished")
 
                         -- function call causes player to receive income from demolishing, so we
                         -- measure treasury value pre-/post-demolish, and adjust accordingly
@@ -145,13 +175,29 @@ core:add_listener(
                             pre_resource = faction:pooled_resource_manager():resource("wh3_main_ksl_devotion"):value()
                         end
 
-                        -- do the demolition
-                        cm:region_slot_instantly_dismantle_building(start_slot)                            
-                        cm:region_slot_instantly_dismantle_building(end_slot)
+                        if string.find(start_slot:template_key(), "secondary") and string.find(end_slot:template_key(), "secondary") then
+                            organizer_out("swapping region slots")
+                        
+                            -- do the demolition
+                            cm:region_slot_instantly_dismantle_building(start_slot)                            
+                            cm:region_slot_instantly_dismantle_building(end_slot)
 
-                        -- do the construction
-                        cm:region_slot_instantly_upgrade_building(start_slot, end_building)
-                        cm:region_slot_instantly_upgrade_building(end_slot, start_building)
+                            -- do the construction
+                            cm:region_slot_instantly_upgrade_building(start_slot, end_building)
+                            cm:region_slot_instantly_upgrade_building(end_slot, start_building)
+                        elseif not string.find(start_slot:template_key(), "secondary") and not string.find(end_slot:template_key(), "secondary")  then
+                            organizer_out("swapping foreign slots")
+
+                            -- do the demolition
+                            cm:foreign_slot_instantly_dismantle_building(start_slot)
+                            cm:foreign_slot_instantly_dismantle_building(end_slot)
+
+                            -- do the construction
+                            cm:foreign_slot_instantly_upgrade_building(start_slot, end_building)
+                            cm:foreign_slot_instantly_upgrade_building(end_slot, start_building)
+                        else
+                            organizer_out("slot types do not match, aborting move")
+                        end
 
                         -- do the pooled_resource adjustment
                         local post_resource
@@ -169,6 +215,7 @@ core:add_listener(
 
                         -- re-enable building demolition notification
                         cm:disable_event_feed_events(false, "","","provinces_building_demolished")
+                        cm:disable_event_feed_events(false, "","","foreign_slot_building_demolished")
                     end
                     sanitize_globals()
                 end
